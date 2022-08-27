@@ -139,7 +139,7 @@ static mut ORIG_HWND: Option<unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM
 // Detour for wglSwapBuffers. This is the last call OpenGL makes, hence the immedate GUI should be drawn at this point
 #[allow(non_snake_case)]
 pub fn wglSwapBuffers_detour(dc: HDC) -> () {
-    //println!("Called wglSwapBuffers");
+    println!("Called wglSwapBuffers");
 
     if !unsafe { INIT } {
         let opengl_hwnd = unsafe { WindowFromDC(dc) };
@@ -166,6 +166,9 @@ pub fn wglSwapBuffers_detour(dc: HDC) -> () {
 
     if unsafe { INIT } {
         let egui_ctx = unsafe { &mut EGUI }.as_mut().unwrap();
+        let painter = unsafe { &mut EGUI_PAINTER}.as_mut().unwrap();
+
+        egui_ctx.begin_frame(RawInput::default());
 
         let mut amplitude = 0.0;
 
@@ -181,6 +184,17 @@ pub fn wglSwapBuffers_detour(dc: HDC) -> () {
                 println!("Clicked the button");
             }
         });
+
+        let (egui_output, paint_cmds) = egui_ctx.end_frame();
+
+        let paint_jobs = egui_ctx.tessellate(paint_cmds);
+        
+        painter.paint_jobs(
+            None,
+            paint_jobs,
+            &egui_ctx.texture(),
+            1.0,
+        );
 
         /*let ui = imgui.frame();
 
