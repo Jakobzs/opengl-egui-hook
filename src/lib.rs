@@ -3,8 +3,6 @@
 use anyhow::{anyhow, Result};
 use detour::static_detour;
 use egui::{Pos2, RawInput, Modifiers, CtxRef};
-use imgui::{Condition, Context, Key, Window};
-use imgui_opengl_renderer::Renderer;
 use painter::Painter;
 use std::{
     ffi::{c_void, CString},
@@ -84,15 +82,7 @@ static_detour! {
   pub static OpenGl32wglSwapBuffers: unsafe extern "system" fn(HDC) -> ();
 }
 
-fn hiword(l: u32) -> u16 {
-    ((l >> 16) & 0xffff) as u16
-}
-
-fn get_wheel_delta_wparam(wparam: u32) -> u16 {
-    hiword(wparam) as u16
-}
-
-fn imgui_wnd_proc_impl(
+fn egui_wnd_proc_impl(
     hwnd: HWND,
     umsg: u32,
     WPARAM(wparam): WPARAM,
@@ -106,7 +96,7 @@ fn imgui_wnd_proc_impl(
 fn wndproc_hook(hWnd: HWND, uMsg: u32, wParam: WPARAM, lParam: LPARAM) -> LRESULT {
     //println!("Msg is: {}", uMsg);
 
-    if imgui_wnd_proc_impl(hWnd, uMsg, wParam, lParam) == LRESULT(1) {
+    if egui_wnd_proc_impl(hWnd, uMsg, wParam, lParam) == LRESULT(1) {
         return LRESULT(1);
     }
 
