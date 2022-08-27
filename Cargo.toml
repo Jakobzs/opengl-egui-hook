@@ -1,15 +1,15 @@
 [package]
-name = "opengl3-imgui-hook-rs"
+name = "opengl-egui-hook-rs"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "opengl3_imgui_hook"
+name = "opengl_egui_hook"
 crate-type = ["dylib"]
 
 [dependencies]
 imgui = "0.8"
-imgui-opengl-renderer = "0.11.1"
+imgui-opengl-renderer = "0.11"
 detour = "0.8"
 anyhow = "1"
 gl_loader = "0.1"
