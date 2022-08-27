@@ -2,8 +2,10 @@
 
 use anyhow::{anyhow, Result};
 use detour::static_detour;
+use egui::{Pos2, RawInput, Modifiers, CtxRef};
 use imgui::{Condition, Context, Key, Window};
 use imgui_opengl_renderer::Renderer;
+use painter::Painter;
 use std::{
     ffi::{c_void, CString},
     mem,
@@ -82,12 +84,6 @@ static_detour! {
   pub static OpenGl32wglSwapBuffers: unsafe extern "system" fn(HDC) -> ();
 }
 
-static mut INIT: bool = false;
-static mut IMGUI: Option<Context> = None;
-static mut IMGUI_RENDERER: Option<Renderer> = None;
-static mut ORIG_HWND: Option<unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT> =
-    None;
-
 fn hiword(l: u32) -> u16 {
     ((l >> 16) & 0xffff) as u16
 }
@@ -102,82 +98,8 @@ fn imgui_wnd_proc_impl(
     WPARAM(wparam): WPARAM,
     LPARAM(lparam): LPARAM,
 ) -> LRESULT {
-    let mut io = unsafe { IMGUI.as_mut().unwrap() }.io_mut();
-
-    //println!("Got msg: {}", umsg);
-    match umsg {
-        WM_KEYDOWN | WM_SYSKEYDOWN => {
-            if wparam < 256 {
-                io.keys_down[wparam as usize] = true;
-            }
-        }
-        WM_KEYUP | WM_SYSKEYUP => {
-            if wparam < 256 {
-                io.keys_down[wparam as usize] = false;
-            }
-        }
-        WM_LBUTTONDOWN | WM_LBUTTONDBLCLK => {
-            println!("Mouse button down");
-            io.mouse_down[0] = true;
-        }
-        WM_RBUTTONDOWN | WM_RBUTTONDBLCLK => {
-            io.mouse_down[1] = true;
-        }
-        WM_MBUTTONDOWN | WM_MBUTTONDBLCLK => {
-            io.mouse_down[2] = true;
-        }
-        WM_XBUTTONDOWN | WM_XBUTTONDBLCLK => {
-            let btn = if hiword(wparam as _) == XBUTTON1.0 as u16 {
-                3
-            } else {
-                4
-            };
-            io.mouse_down[btn] = true;
-        }
-        WM_LBUTTONUP => {
-            io.mouse_down[0] = false;
-        }
-        WM_RBUTTONUP => {
-            io.mouse_down[1] = false;
-        }
-        WM_MBUTTONUP => {
-            io.mouse_down[2] = false;
-        }
-        WM_XBUTTONUP => {
-            let btn = if hiword(wparam as _) == XBUTTON1.0 as u16 {
-                3
-            } else {
-                4
-            };
-            io.mouse_down[btn] = false;
-        }
-        WM_MOUSEWHEEL => {
-            let wheel_delta_wparam = get_wheel_delta_wparam(wparam as _);
-            let wheel_delta = WHEEL_DELTA as f32;
-            io.mouse_wheel += (wheel_delta_wparam as i16 as f32) / wheel_delta;
-        }
-        WM_MOUSEHWHEEL => {
-            let wheel_delta_wparam = get_wheel_delta_wparam(wparam as _);
-            let wheel_delta = WHEEL_DELTA as f32;
-            io.mouse_wheel_h += (wheel_delta_wparam as i16 as f32) / wheel_delta;
-        }
-        WM_CHAR => io.add_input_character(wparam as u8 as char),
-        WM_ACTIVATE => {
-            println!("ACTIVATED!!!");
-            //*imgui_renderer.focus_mut() = loword(wparam as _) != WA_INACTIVE as u16;
-            return LRESULT(1);
-        }
-        _ => {}
-    };
-
-    /*let wnd_proc = imgui_renderer.wnd_proc();
-    let should_block_messages = imgui_render_loop
-        .as_ref()
-        .should_block_messages(imgui_renderer.io());
-    drop(imgui_renderer);*/
-
-    //LRESULT(1)
-    unsafe { CallWindowProcW(ORIG_HWND, hwnd, umsg, WPARAM(wparam), LPARAM(lparam)) }
+    LRESULT(1)
+    //unsafe { CallWindowProcW(ORIG_HWND, hwnd, umsg, WPARAM(wparam), LPARAM(lparam)) }
 }
 
 #[allow(non_snake_case)]
@@ -192,70 +114,75 @@ fn wndproc_hook(hWnd: HWND, uMsg: u32, wParam: WPARAM, lParam: LPARAM) -> LRESUL
     unsafe { CallWindowProcW(ORIG_HWND, hWnd, uMsg, wParam, lParam) }
 }
 
+pub struct EguiInputState {
+    pub pointer_pos: Pos2,
+    pub input: RawInput,
+    pub modifiers: Modifiers,
+}
+
+impl EguiInputState {
+    pub fn new(input: RawInput) -> Self {
+        EguiInputState {
+            pointer_pos: Pos2::new(0f32, 0f32),
+            input,
+            modifiers: Modifiers::default(),
+        }
+    }
+}
+
+static mut INIT: bool = false;
+static mut EGUI: Option<CtxRef> = None;
+static mut EGUI_PAINTER: Option<Painter> = None;
+static mut ORIG_HWND: Option<unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT> =
+    None;
+
+// Detour for wglSwapBuffers. This is the last call OpenGL makes, hence the immedate GUI should be drawn at this point
 #[allow(non_snake_case)]
 pub fn wglSwapBuffers_detour(dc: HDC) -> () {
     //println!("Called wglSwapBuffers");
 
     if !unsafe { INIT } {
-        let game_window = unsafe { WindowFromDC(dc) };
+        let opengl_hwnd = unsafe { WindowFromDC(dc) };
 
         unsafe {
             ORIG_HWND = mem::transmute::<
                 isize,
                 Option<unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT>,
             >(SetWindowLongPtrW(
-                game_window,
+                opengl_hwnd,
                 GWL_WNDPROC,
                 wndproc_hook as isize,
             ))
         };
 
-        let mut imgui = Context::create();
-        imgui.set_ini_filename(None);
+        let painter = Painter::new(1280, 1080);
+        let egui_ctx = egui::CtxRef::default();
 
-        //imgui.style_mut().window_title_align = [0.5, 0.5];
-        let mut io = imgui.io_mut();
-
-        io.display_size = [600.0, 200.0];
-        io.nav_active = true;
-        io.nav_visible = true;
-
-        io[Key::Tab] = VK_TAB.0 as _;
-        io[Key::LeftArrow] = VK_LEFT.0 as _;
-        io[Key::RightArrow] = VK_RIGHT.0 as _;
-        io[Key::UpArrow] = VK_UP.0 as _;
-        io[Key::DownArrow] = VK_DOWN.0 as _;
-        io[Key::PageUp] = VK_PRIOR.0 as _;
-        io[Key::PageDown] = VK_NEXT.0 as _;
-        io[Key::Home] = VK_HOME.0 as _;
-        io[Key::End] = VK_END.0 as _;
-        io[Key::Insert] = VK_INSERT.0 as _;
-        io[Key::Delete] = VK_DELETE.0 as _;
-        io[Key::Backspace] = VK_BACK.0 as _;
-        io[Key::Space] = VK_SPACE.0 as _;
-        io[Key::Enter] = VK_RETURN.0 as _;
-        io[Key::Escape] = VK_ESCAPE.0 as _;
-        io[Key::A] = VK_A.0 as _;
-        io[Key::C] = VK_C.0 as _;
-        io[Key::V] = VK_V.0 as _;
-        io[Key::X] = VK_X.0 as _;
-        io[Key::Y] = VK_Y.0 as _;
-        io[Key::Z] = VK_Z.0 as _;
-
-        // Init the loader (grabbing the func required)
-        gl_loader::init_gl();
-        // Create the renderer
-        let renderer = Renderer::new(&mut imgui, |s| gl_loader::get_proc_address(s) as _);
-
-        unsafe { IMGUI = Some(imgui) };
-        unsafe { IMGUI_RENDERER = Some(renderer) };
+        unsafe { EGUI = Some(egui_ctx)};
+        unsafe { EGUI_PAINTER = Some(painter)};
 
         unsafe { INIT = true };
     }
 
     if unsafe { INIT } {
-        let imgui = unsafe { &mut IMGUI }.as_mut().unwrap();
-        let ui = imgui.frame();
+        let egui_ctx = unsafe { &mut EGUI }.as_mut().unwrap();
+
+        let mut amplitude = 0.0;
+
+        egui::Window::new("Egui with GLFW").show(&egui_ctx, |ui| {
+            ui.separator();
+            ui.label("A simple sine wave plotted onto a GL texture then blitted to an egui managed Image.");
+            ui.label(" ");
+            ui.label(" ");
+            
+            ui.add(egui::Slider::new(&mut amplitude, 0.0..=50.0).text("Amplitude"));
+            ui.label(" ");
+            if ui.button("Quit").clicked() {
+                println!("Clicked the button");
+            }
+        });
+
+        /*let ui = imgui.frame();
 
         Window::new("Hello world")
             .size([300.0, 110.0], Condition::FirstUseEver)
@@ -276,7 +203,7 @@ pub fn wglSwapBuffers_detour(dc: HDC) -> () {
 
         println!("Mouse pos 0: {}", imgui.io().mouse_pos[0]);
         imgui.io_mut().mouse_pos[0] = 300.0;
-        imgui.io_mut().mouse_pos[1] = 110.0;
+        imgui.io_mut().mouse_pos[1] = 110.0;*/
     }
 
     unsafe { OpenGl32wglSwapBuffers.call(dc) }
