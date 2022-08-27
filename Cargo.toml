@@ -13,6 +13,8 @@ imgui-opengl-renderer = "0.11"
 detour = "0.8"
 anyhow = "1"
 gl_loader = "0.1"
+gl = "0.14.0"
+egui = "0.13.1"
 
 [dependencies.windows]
 version = "0.39"
