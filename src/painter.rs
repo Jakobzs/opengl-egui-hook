@@ -1,5 +1,4 @@
 extern crate gl;
-extern crate glfw;
 use gl::types::*;
 use std::ffi::CString;
 use std::mem;
@@ -184,13 +183,13 @@ pub fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
 
 impl Painter {
     pub fn new(
-        window: &mut glfw::Window,
         canvas_width: u32,
         canvas_height: u32,
     ) -> Painter {
         unsafe {
             let mut egui_texture = 0;
-            gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
+            gl_loader::init_gl();
+            gl::load_with(|s| gl_loader::get_proc_address(s) as _);
             gl::GenTextures(1, &mut egui_texture);
             gl::BindTexture(gl::TEXTURE_2D, egui_texture);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
