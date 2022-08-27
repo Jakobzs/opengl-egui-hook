@@ -31,6 +31,8 @@ use windows::{
     },
 };
 
+mod painter;
+
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "system" fn DllMain(
