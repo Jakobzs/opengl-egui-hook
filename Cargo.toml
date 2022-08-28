@@ -1,10 +1,10 @@
 [package]
-name = "opengl-egui-hook-rs"
+name = "opengl3-egui-hook-rs"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "opengl_egui_hook"
+name = "opengl3_egui_hook"
 crate-type = ["dylib"]
 
 [dependencies]

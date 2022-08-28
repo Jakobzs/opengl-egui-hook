@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Result};
 use detour::static_detour;
-use egui::{Pos2, RawInput, Modifiers, CtxRef};
+use egui::{CtxRef, Modifiers, Pos2, RawInput};
 use painter::Painter;
 use std::{
     ffi::{c_void, CString},
@@ -145,30 +145,30 @@ pub fn wglSwapBuffers_detour(dc: HDC) -> () {
             ))
         };
 
-        let painter = Painter::new(1280, 1080);
+        let painter = Painter::new(600, 800);
         let egui_ctx = egui::CtxRef::default();
 
-        unsafe { EGUI = Some(egui_ctx)};
-        unsafe { EGUI_PAINTER = Some(painter)};
+        unsafe { EGUI = Some(egui_ctx) };
+        unsafe { EGUI_PAINTER = Some(painter) };
 
         unsafe { INIT = true };
     }
 
     if unsafe { INIT } {
         let egui_ctx = unsafe { &mut EGUI }.as_mut().unwrap();
-        let painter = unsafe { &mut EGUI_PAINTER}.as_mut().unwrap();
+        let painter = unsafe { &mut EGUI_PAINTER }.as_mut().unwrap();
 
         egui_ctx.begin_frame(RawInput::default());
 
         let mut amplitude = 0.0;
 
-        egui::Window::new("Egui with GLFW").show(&egui_ctx, |ui| {
+        egui::Window::new("Egui OpenGL3 hook").show(&egui_ctx, |ui| {
             ui.separator();
-            ui.label("A simple sine wave plotted onto a GL texture then blitted to an egui managed Image.");
+            ui.label("Hello there.");
             ui.label(" ");
             ui.label(" ");
-            
-            ui.add(egui::Slider::new(&mut amplitude, 0.0..=50.0).text("Amplitude"));
+
+            ui.add(egui::Slider::new(&mut amplitude, 0.0..=50.0).text("Testy"));
             ui.label(" ");
             if ui.button("Quit").clicked() {
                 println!("Clicked the button");
@@ -178,10 +178,8 @@ pub fn wglSwapBuffers_detour(dc: HDC) -> () {
         let (egui_output, paint_cmds) = egui_ctx.end_frame();
 
         let paint_jobs = egui_ctx.tessellate(paint_cmds);
-        
 
-            painter.paint_jobs(None, paint_jobs, &egui_ctx.texture(), 1.0);
-        
+        painter.paint_jobs(None, paint_jobs, &egui_ctx.texture(), 1.0);
 
         /*let ui = imgui.frame();
 
