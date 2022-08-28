@@ -145,7 +145,7 @@ pub fn wglSwapBuffers_detour(dc: HDC) -> () {
             ))
         };
 
-        let painter = Painter::new(600, 800);
+        let painter = Painter::new((600, 800), 1.0);
         let egui_ctx = egui::CtxRef::default();
 
         unsafe { EGUI = Some(egui_ctx) };
@@ -179,7 +179,7 @@ pub fn wglSwapBuffers_detour(dc: HDC) -> () {
 
         let paint_jobs = egui_ctx.tessellate(paint_cmds);
 
-        painter.paint_jobs(None, paint_jobs, &egui_ctx.texture(), 1.0);
+        painter.paint_jobs(None, paint_jobs, &egui_ctx.font_image());
 
         /*let ui = imgui.frame();
 
