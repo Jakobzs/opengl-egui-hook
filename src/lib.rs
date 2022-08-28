@@ -179,12 +179,9 @@ pub fn wglSwapBuffers_detour(dc: HDC) -> () {
 
         let paint_jobs = egui_ctx.tessellate(paint_cmds);
         
-        painter.paint_jobs(
-            None,
-            paint_jobs,
-            &egui_ctx.texture(),
-            1.0,
-        );
+
+            painter.paint_jobs(None, paint_jobs, &egui_ctx.texture(), 1.0);
+        
 
         /*let ui = imgui.frame();
 
